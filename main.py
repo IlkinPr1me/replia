@@ -649,6 +649,20 @@ HTML_PAGE = """<!DOCTYPE html>
     setTimeout(() => t.classList.remove('show'), 3000);
   }
 
+  // ── USER MENU ─────────────────────────────────────────────
+  function toggleUserMenu() {{
+    const menu = document.getElementById('userMenu');
+    if (!menu) return;
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  }}
+  document.addEventListener('click', function(e) {{
+    const wrap = document.getElementById('userMenuWrap');
+    if (wrap && !wrap.contains(e.target)) {{
+      const menu = document.getElementById('userMenu');
+      if (menu) menu.style.display = 'none';
+    }}
+  }});
+
   // ── INIT ──────────────────────────────────────────────────
   window.onload = async () => {
     loadStyle();
