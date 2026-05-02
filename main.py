@@ -189,6 +189,14 @@ HTML_PAGE = """<!DOCTYPE html>
     .dots::after{content:'';animation:dots 1.2s infinite}
     @keyframes dots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
   </style>
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-943P8C3YXD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-943P8C3YXD');
+  </script>
 </head>
 <body>
 
