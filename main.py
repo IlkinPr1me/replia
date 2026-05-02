@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import os
 import httpx
@@ -21,6 +20,497 @@ app.add_middleware(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+HTML_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Replai — AI Reply Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #161616;
+      --border: rgba(255,255,255,0.07);
+      --border-hover: rgba(200,240,90,0.25);
+      --text: #f0ede8;
+      --muted: rgba(240,237,232,0.4);
+      --accent: #c8f05a;
+      --accent-dim: rgba(200,240,90,0.1);
+      --red: #ff6b6b;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      padding: 0 32px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(20px);
+    }
+
+    .logo { font-family: 'Instrument Serif', serif; font-size: 20px; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent); }
+
+    .nav-badge {
+      font-size: 12px; font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(200,240,90,0.2);
+      padding: 5px 12px; border-radius: 100px;
+    }
+
+    .app { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .page-header { margin-bottom: 32px; }
+    .page-header h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(32px, 5vw, 48px);
+      letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 8px;
+    }
+    .page-header h1 em { font-style: italic; color: var(--accent); }
+    .page-header p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+    .tabs {
+      display: flex; gap: 2px;
+      background: var(--surface2);
+      border-radius: 10px; padding: 3px; margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1; padding: 8px; border-radius: 8px; border: none;
+      background: transparent; color: var(--muted);
+      font-family: 'DM Sans', sans-serif; font-size: 13px;
+      cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .tab.active { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 680px) { .cols { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
+    .panel-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-title { font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .panel-body { padding: 20px; }
+
+    textarea {
+      width: 100%; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 300; line-height: 1.7;
+      resize: none; min-height: 220px;
+    }
+    textarea::placeholder { color: var(--muted); }
+
+    .options-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+    }
+    .option-label {
+      font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted);
+      display: flex; align-items: center; margin-right: 4px;
+    }
+    .chip {
+      padding: 6px 14px; border-radius: 100px; border: 1px solid var(--border);
+      font-size: 13px; color: var(--muted); cursor: pointer;
+      transition: all 0.2s; background: transparent;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .chip:hover { border-color: var(--border-hover); color: var(--text); }
+    .chip.active { background: var(--accent-dim); border-color: rgba(200,240,90,0.35); color: var(--accent); }
+
+    .context-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .context-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .context-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300;
+      outline: none; transition: border-color 0.2s;
+    }
+    .context-input:focus { border-color: var(--border-hover); }
+    .context-input::placeholder { color: var(--muted); }
+
+    .generate-wrap { margin-top: 12px; }
+    .btn-generate {
+      width: 100%; background: var(--accent); color: #0a0a0a;
+      border: none; padding: 15px; border-radius: 12px;
+      font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+      cursor: pointer; transition: opacity 0.2s, transform 0.15s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-generate:hover { opacity: 0.88; }
+    .btn-generate:active { transform: scale(0.98); }
+    .btn-generate:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(10,10,10,0.3);
+      border-top-color: #0a0a0a;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    .output-empty {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 220px; gap: 12px;
+      color: var(--muted); text-align: center;
+    }
+    .output-empty .icon { font-size: 36px; opacity: 0.4; }
+    .output-empty p { font-size: 14px; line-height: 1.6; max-width: 200px; }
+
+    .output-text {
+      display: none; font-size: 14px; line-height: 1.8;
+      color: var(--text); white-space: pre-wrap; min-height: 220px;
+    }
+    .output-text.visible { display: block; }
+
+    .output-actions { display: none; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .output-actions.visible { display: flex; }
+
+    .btn-copy {
+      flex: 1; background: var(--accent); color: #0a0a0a;
+      border: none; padding: 11px; border-radius: 10px;
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: opacity 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-copy:hover { opacity: 0.85; }
+
+    .btn-regen {
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border); padding: 11px 16px; border-radius: 10px;
+      font-family: 'DM Sans', sans-serif; font-size: 13px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-regen:hover { border-color: var(--border-hover); color: var(--text); }
+
+    .char-count { font-size: 11px; color: var(--muted); }
+
+    .style-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 24px; margin-bottom: 16px; }
+    .style-panel h3 { font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .style-textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300;
+      line-height: 1.7; resize: none; outline: none; min-height: 90px;
+      transition: border-color 0.2s;
+    }
+    .style-textarea:focus { border-color: var(--border-hover); }
+    .style-textarea::placeholder { color: var(--muted); }
+
+    .history-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
+    .history-item { padding: 16px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s; }
+    .history-item:last-child { border-bottom: none; }
+    .history-item:hover { background: var(--surface2); }
+    .history-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    .history-meta span { color: var(--muted); font-weight: 300; font-size: 12px; }
+    .history-preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    .toast {
+      position: fixed; bottom: 32px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 100px; padding: 12px 24px; font-size: 14px; color: var(--text);
+      opacity: 0; transition: all 0.3s ease; z-index: 1000;
+      pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { border-color: rgba(200,240,90,0.3); color: var(--accent); }
+    .toast.error { border-color: rgba(255,107,107,0.3); color: var(--red); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+    .loading-dots::after { content: ''; animation: dots 1.2s infinite; }
+    @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">repl<span>ai</span></div>
+  <div class="nav-badge">✦ Beta</div>
+</nav>
+
+<div class="app">
+  <div class="page-header">
+    <h1>Generate a<br><em>perfect reply.</em></h1>
+    <p>Paste any message and get an AI-crafted response in seconds.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('reply', this)">✦ Reply</button>
+    <button class="tab" onclick="switchTab('history', this)">History</button>
+    <button class="tab" onclick="switchTab('style', this)">My Style</button>
+  </div>
+
+  <!-- REPLY TAB -->
+  <div class="tab-content active" id="tab-reply">
+    <div class="cols">
+      <div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Incoming message</span>
+            <span class="char-count" id="charCount">0 chars</span>
+          </div>
+          <div class="panel-body">
+            <textarea id="inputMsg" placeholder="Paste the email or message you received here..." oninput="updateCharCount()"></textarea>
+
+            <div class="options-row">
+              <span class="option-label">Tone</span>
+              <button class="chip active" onclick="selectChip(this)">Professional</button>
+              <button class="chip" onclick="selectChip(this)">Friendly</button>
+              <button class="chip" onclick="selectChip(this)">Brief</button>
+              <button class="chip" onclick="selectChip(this)">Formal</button>
+            </div>
+
+            <div class="options-row">
+              <span class="option-label">Lang</span>
+              <button class="chip active" onclick="selectChip(this)">English</button>
+              <button class="chip" onclick="selectChip(this)">Russian</button>
+              <button class="chip" onclick="selectChip(this)">Auto</button>
+            </div>
+
+            <div class="context-section">
+              <div class="context-label">Extra context (optional)</div>
+              <input class="context-input" id="extraContext" placeholder="e.g. I'm busy this week, decline politely..."/>
+            </div>
+          </div>
+        </div>
+
+        <div class="generate-wrap">
+          <button class="btn-generate" id="generateBtn" onclick="generateReply()">
+            <div class="spinner" id="spinner"></div>
+            <span id="generateLabel">✦ Generate Reply</span>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">AI Reply</span>
+            <span class="char-count" id="outputCharCount"></span>
+          </div>
+          <div class="panel-body">
+            <div class="output-empty" id="outputEmpty">
+              <div class="icon">✦</div>
+              <p>Your AI-crafted reply will appear here</p>
+            </div>
+            <div class="output-text" id="outputText"></div>
+            <div class="output-actions" id="outputActions">
+              <button class="btn-copy" onclick="copyReply()"><span id="copyLabel">Copy Reply</span></button>
+              <button class="btn-regen" onclick="generateReply()">↻ Redo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-content" id="tab-history">
+    <div class="history-panel" id="historyList">
+      <div class="history-empty">No replies yet. Generate your first reply!</div>
+    </div>
+  </div>
+
+  <!-- STYLE TAB -->
+  <div class="tab-content" id="tab-style">
+    <div class="style-panel">
+      <h3>Your writing style</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Paste 2–3 examples of how you normally write. Replai will match your tone and vocabulary.</p>
+      <textarea class="style-textarea" id="styleExamples" placeholder="Example 1: Hey John, thanks for reaching out!..." oninput="saveStyle()"></textarea>
+    </div>
+    <div class="style-panel">
+      <h3>About you</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Tell Replai about your role and how you like to communicate.</p>
+      <textarea class="style-textarea" id="aboutMe" placeholder="e.g. I'm a freelance designer. I'm direct but friendly, I keep emails short." oninput="saveStyle()" style="min-height:70px;"></textarea>
+      <p style="margin-top:10px;font-size:12px;color:var(--muted);">✓ Saved automatically</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let history = JSON.parse(localStorage.getItem('replai_history') || '[]');
+  let currentReply = '';
+  let isGenerating = false;
+
+  window.onload = () => { loadStyle(); renderHistory(); };
+
+  function switchTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'history') renderHistory();
+  }
+
+  function selectChip(el) {
+    el.closest('.options-row').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function getChipValue(label) {
+    const rows = document.querySelectorAll('.options-row');
+    for (const row of rows) {
+      if (row.querySelector('.option-label')?.textContent.toLowerCase().includes(label)) {
+        return row.querySelector('.chip.active')?.textContent || '';
+      }
+    }
+    return '';
+  }
+
+  function updateCharCount() {
+    const len = document.getElementById('inputMsg').value.length;
+    document.getElementById('charCount').textContent = `${len} chars`;
+  }
+
+  function saveStyle() {
+    localStorage.setItem('replai_style', document.getElementById('styleExamples').value);
+    localStorage.setItem('replai_about', document.getElementById('aboutMe').value);
+  }
+
+  function loadStyle() {
+    const s = localStorage.getItem('replai_style');
+    const a = localStorage.getItem('replai_about');
+    if (s) document.getElementById('styleExamples').value = s;
+    if (a) document.getElementById('aboutMe').value = a;
+  }
+
+  async function generateReply() {
+    if (isGenerating) return;
+    const msg = document.getElementById('inputMsg').value.trim();
+    if (!msg) { showToast('Please paste a message first', 'error'); return; }
+
+    isGenerating = true;
+    const btn = document.getElementById('generateBtn');
+    const spinner = document.getElementById('spinner');
+    const label = document.getElementById('generateLabel');
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    label.textContent = 'Generating';
+    label.classList.add('loading-dots');
+
+    document.getElementById('outputEmpty').style.display = 'none';
+    document.getElementById('outputText').classList.add('visible');
+    document.getElementById('outputText').innerHTML = '<span style="color:var(--muted)">Writing your reply...</span>';
+    document.getElementById('outputActions').classList.remove('visible');
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          tone: getChipValue('tone'),
+          language: getChipValue('lang'),
+          context: document.getElementById('extraContext').value.trim(),
+          style_examples: localStorage.getItem('replai_style') || '',
+          about_me: localStorage.getItem('replai_about') || ''
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Server error');
+
+      currentReply = data.reply;
+      document.getElementById('outputText').textContent = currentReply;
+      document.getElementById('outputCharCount').textContent = `${currentReply.length} chars`;
+      document.getElementById('outputActions').classList.add('visible');
+      saveToHistory(msg, currentReply, getChipValue('tone'));
+
+    } catch (e) {
+      document.getElementById('outputText').innerHTML = '';
+      document.getElementById('outputEmpty').style.display = 'flex';
+      showToast('Error: ' + e.message, 'error');
+    } finally {
+      isGenerating = false;
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      label.textContent = '✦ Generate Reply';
+      label.classList.remove('loading-dots');
+    }
+  }
+
+  function copyReply() {
+    if (!currentReply) return;
+    navigator.clipboard.writeText(currentReply).then(() => {
+      document.getElementById('copyLabel').textContent = '✓ Copied!';
+      setTimeout(() => document.getElementById('copyLabel').textContent = 'Copy Reply', 2000);
+      showToast('Copied to clipboard ✓', 'success');
+    });
+  }
+
+  function saveToHistory(incoming, reply, tone) {
+    history.unshift({ id: Date.now(), incoming: incoming.slice(0, 100), reply, tone, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    if (history.length > 20) history.pop();
+    localStorage.setItem('replai_history', JSON.stringify(history));
+  }
+
+  function renderHistory() {
+    const el = document.getElementById('historyList');
+    if (!history.length) { el.innerHTML = '<div class="history-empty">No replies yet. Generate your first reply!</div>'; return; }
+    el.innerHTML = history.map(h => `
+      <div class="history-item" onclick="loadHistory(${h.id})">
+        <div class="history-meta"><span>${h.tone} reply</span><span>${h.time}</span></div>
+        <div class="history-preview">${h.incoming.replace(/</g, '&lt;')}...</div>
+      </div>`).join('');
+  }
+
+  function loadHistory(id) {
+    const item = history.find(h => h.id === id);
+    if (!item) return;
+    currentReply = item.reply;
+    document.getElementById('outputEmpty').style.display = 'none';
+    document.getElementById('outputText').classList.add('visible');
+    document.getElementById('outputText').textContent = item.reply;
+    document.getElementById('outputActions').classList.add('visible');
+    document.getElementById('outputCharCount').textContent = `${item.reply.length} chars`;
+    document.querySelectorAll('.tab')[0].click();
+  }
+
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + type + ' show';
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>
+"""
+
 
 class ReplyRequest(BaseModel):
     message: str
@@ -31,9 +521,9 @@ class ReplyRequest(BaseModel):
     about_me: str = ""
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def root():
-    return FileResponse("static/index.html")
+    return HTML_PAGE
 
 
 @app.post("/api/generate")
@@ -42,7 +532,7 @@ async def generate_reply(req: ReplyRequest):
         raise HTTPException(status_code=400, detail="Message is required")
 
     if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set in .env file")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
 
     system = "You are Replai, an AI assistant that writes email and message replies on behalf of the user. Write a reply that sounds natural, human, and matches the requested tone. Output ONLY the reply text itself, ready to send. No explanations, no preamble."
 
@@ -88,6 +578,3 @@ async def generate_reply(req: ReplyRequest):
         raise HTTPException(status_code=504, detail="Request timed out, try again")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
