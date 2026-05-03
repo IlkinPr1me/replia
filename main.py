@@ -32,6 +32,8 @@ HTML_PAGE = """<!DOCTYPE html>
     gtag('js', new Date());
     gtag('config', 'G-943P8C3YXD');
   </script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8f05a'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='serif' font-size='18' font-style='italic' fill='%230a0a0a'%3Er%3C/text%3E%3C/svg%3E"/>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8f05a'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='serif' font-size='18' font-style='italic' fill='%230a0a0a'%3Er%3C/text%3E%3C/svg%3E"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
@@ -255,7 +257,14 @@ HTML_PAGE = """<!DOCTYPE html>
 
 <!-- NAV -->
 <nav>
-  <div class="logo">repl<span>ai</span></div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="https://thereplai.netlify.app" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;transition:color .2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">
+      ← Back
+    </a>
+    <a href="https://thereplai.netlify.app" style="text-decoration:none">
+      <div class="logo">repl<span>ai</span></div>
+    </a>
+  </div>
   <div class="nav-right">
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
     <div id="navAuth"></div>
