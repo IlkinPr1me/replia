@@ -166,6 +166,13 @@ HTML_PAGE = """<!DOCTYPE html>
     .chip.active{background:var(--accent-dim);border-color:rgba(200,240,90,.35);color:var(--accent)}
 
     .ctx-wrap{margin-top:13px;padding-top:13px;border-top:1px solid var(--border)}
+    .gender-row{display:flex;gap:8px;margin-top:13px;padding-top:13px;border-top:1px solid var(--border)}
+    .gender-card{flex:1;padding:10px 6px;border-radius:12px;border:1px solid var(--border);cursor:pointer;transition:all .2s;background:transparent;font-family:'DM Sans',sans-serif;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px}
+    .gender-card:hover{border-color:rgba(200,240,90,.3)}
+    .gender-card.active{background:var(--accent-dim);border-color:rgba(200,240,90,.4)}
+    .gender-card-icon{font-size:18px}
+    .gender-card-name{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+    .gender-card.active .gender-card-name{color:var(--accent)}
     .ctx-lbl{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
     .ctx-input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .2s,background .3s}
     .ctx-input:focus{border-color:rgba(200,240,90,.4)}
@@ -313,6 +320,21 @@ HTML_PAGE = """<!DOCTYPE html>
               <button class="chip" onclick="selectChip(this)">Russian</button>
               <button class="chip" onclick="selectChip(this)">Auto</button>
             </div>
+            <div class="gender-row" id="genderRow">
+                <button class="gender-card active" id="g-auto" data-gender="auto">
+                  <span class="gender-card-icon">🤖</span>
+                  <span class="gender-card-name">Auto detect</span>
+                </button>
+                <button class="gender-card" id="g-male" data-gender="male">
+                  <span class="gender-card-icon">👨</span>
+                  <span class="gender-card-name">Male</span>
+                </button>
+                <button class="gender-card" id="g-female" data-gender="female">
+                  <span class="gender-card-icon">👩</span>
+                  <span class="gender-card-name">Female</span>
+                </button>
+              </div>
+
             <div class="ctx-wrap">
               <div class="ctx-lbl">Extra context (optional)</div>
               <input class="ctx-input" id="extraCtx" placeholder="e.g. decline politely, ask for more time..."/>
@@ -581,6 +603,19 @@ function updateCharCount() {
   document.getElementById('charCount').textContent = document.getElementById('inputMsg').value.length + ' chars';
 }
 
+  // Gender selection
+  document.querySelectorAll('.gender-card').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.gender-card').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
+
+  function getGender() {
+    var g = document.querySelector('.gender-card.active');
+    return g ? g.dataset.gender : 'auto';
+  }
+
 function saveStyle() {
   localStorage.setItem('replai_style', document.getElementById('styleEx').value);
   localStorage.setItem('replai_about', document.getElementById('aboutMe').value);
@@ -626,6 +661,7 @@ async function generateReply() {
         message: msg,
         tone: getChip('tone'),
         language: getChip('lang'),
+        gender: getGender(),
         context: document.getElementById('extraCtx').value.trim(),
         style_examples: localStorage.getItem('replai_style') || '',
         about_me: localStorage.getItem('replai_about') || ''
@@ -749,6 +785,7 @@ class ReplyRequest(BaseModel):
     context: str = ""
     style_examples: str = ""
     about_me: str = ""
+    gender: str = "auto"  # auto, male, female
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -764,15 +801,30 @@ async def generate_reply(req: ReplyRequest):
         raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
 
     system = "You are Replai, an AI assistant that writes email and message replies on behalf of the user. Write a reply that sounds natural, human, and matches the requested tone. Output ONLY the reply text itself, ready to send. No explanations, no preamble."
+
     if req.about_me:
         system += f"\n\nAbout the user: {req.about_me}"
     if req.style_examples:
         system += f"\n\nExamples of how the user writes:\n{req.style_examples}"
 
+    # Gender context
+    if req.gender == "auto":
+        system += "\n\nIMPORTANT: Carefully analyze the name and writing style of the person you are replying to. Detect their likely gender and adjust your reply accordingly — use appropriate pronouns, address style, and natural language that fits. If unclear, keep it neutral."
+    elif req.gender == "male":
+        system += "\n\nYou are replying to a male person. Use appropriate language, pronouns and tone for addressing a man."
+    elif req.gender == "female":
+        system += "\n\nYou are replying to a female person. Use appropriate language, pronouns and tone for addressing a woman."
+
     user_prompt = f"Write a {req.tone.lower()} reply to the following message"
     if req.language != "Auto":
         user_prompt += f" in {req.language}"
-    user_prompt += f":\n\n---\n{req.message}\n---"
+
+    # Smart context — if message contains thread history
+    if "Latest message:" in req.message:
+        user_prompt += f":\n\nHere is the conversation history for context, followed by the latest message to reply to:\n\n{req.message}"
+    else:
+        user_prompt += f":\n\n---\n{req.message}\n---"
+
     if req.context:
         user_prompt += f"\n\nExtra instructions: {req.context}"
 
